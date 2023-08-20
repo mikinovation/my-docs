@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/app/Dockerfile
+    command: bash -c "/var/www/app/entrypoint.sh"
+    volumes:
+      - ./:/var/www/app:cached
+      - bundle:/bundle:cached
+      - /var/www/app/log
+      - ./tmp:/var/www/app/tmp
+      - /var/www/app/vendor
+    ports:
+      - "3000:3000"
+    tty: true
+    env_file: .env
+    depends_on:
+      - db
+  db:
+    image: mysql:8.1.0
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./tmp/db:/var/lib/postgresql/data
+    env_file: .env
+
+volumes:
+  bundle:
+    driver: local
