@@ -8,4 +8,4 @@ assignees: 'mikinovation'
 
 # TODO
 
-- [ ] 〇〇のドキュメントを追加する
+- 〇〇のドキュメントを追加する
