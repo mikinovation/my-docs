@@ -1,25 +1,42 @@
-use axum::response::IntoResponse;
+mod core;
+mod api;
+
 use axum::{
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
+    routing::{get},
+    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use axum::extract::Extension;
+use hyper::header::CONTENT_TYPE;
+use tower_http::cors::{Any, CorsLayer, Origin};
+use api::handler::article::article_handler::{all_article};
+use core::infrastructure::repository::article::article_repository::ArticleRepository;
+use core::infrastructure::repository::article::article_repository::ArticleRepositoryForDb;
+use sqlx::postgres::PgPool;
+use dotenv::dotenv;
 
 #[tokio::main]
 async fn main() {
-    // loggingの初期化
-    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+    // logging
+    let log_level = env::var("RUST_LOG").unwrap_or("info".to_string());
     env::set_var("RUST_LOG", log_level);
     tracing_subscriber::fmt::init();
+    dotenv().ok();
 
-    let app = Router::new()
-        .route("/", get(root))
-        .route("/users", post(create_user));
+    let database_url = &env::var("DATABASE_URL").expect("undefined [DATABASE_URL]");
+    tracing::debug!("start connect database...");
+    let pool = PgPool::connect(database_url)
+        .await
+        .expect(&format!("fail connect database, url is [{}]", database_url));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let app = create_app(
+        ArticleRepositoryForDb::new(pool.clone()),
+    );
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     tracing::debug!("listening on {}", addr);
 
     axum::Server::bind(&addr)
@@ -28,17 +45,30 @@ async fn main() {
         .unwrap();
 }
 
-async fn root() -> &'static str {
-    "Hello, World!"
+fn create_app<Article: ArticleRepository>(
+    article_repository: Article,
+) -> Router {
+    Router::new()
+        .route("/", get(root))
+        .route("/articles", get(all_article::<Article>))
+/*        .route(
+            "/todos/:id",
+            get(find_todo::<Todo>)
+                // .delete(delete_todo::<Todo>)
+                // .patch(update_todo::<Todo>),
+        )
+*/
+        .layer(Extension(Arc::new(article_repository)))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Origin::exact("http://localhost:3001".parse().unwrap()))
+                .allow_methods(Any)
+                .allow_headers(vec![CONTENT_TYPE]),
+        )
 }
 
-async fn create_user(Json(payload): Json<CreateUser>) -> impl IntoResponse {
-    let user = User {
-        id: 1337,
-        username: payload.username,
-    };
-
-    (StatusCode::CREATED, Json(user))
+async fn root() -> &'static str {
+    "Hello, World!"
 }
 
 #[derive(Deserialize)]

@@ -5,5 +5,7 @@
 ```bash
 copy .env.example .env
 make build
-make up-local
+docker compose up
+docker compose exec api bash
+make dev
 ```
